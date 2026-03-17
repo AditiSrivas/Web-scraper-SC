@@ -3,7 +3,7 @@
 Two use cases in one app:
 
 1. Personalized email generation from `LinkedIn Active Roles.xlsx`.
-2. Website scraper that finds job-like roles, classifies India vs abroad, extracts consultant emails, and AI-maps to your target role list.
+2. Website scraper that finds job-like roles from CSV/XLSX website lists, classifies India vs abroad, extracts consultant emails, AI-maps to your target role list, and drafts outreach emails from the scraped role context.
 
 ## Key speed upgrades
 
@@ -44,12 +44,13 @@ Open [http://localhost:3000](http://localhost:3000)
 ## API routes
 
 - `POST /api/generate` (email generation)
-- `POST /api/scrape-jobs` (website scraper + mapping)
+- `POST /api/scrape-jobs` (website scraper + mapping + contextual outreach drafts)
 
 ## Input expectations
 
 - Email generator input: your LinkedIn `.xlsx` (same format you provided).
 - Scraper input: CSV/XLSX with at least a `Website` column (and optional `Company Name`).
+- Incremental scan memory is persisted in `.cache/scrape-state.json`, so repeated runs only return newly discovered role fingerprints.
 
 ## Vercel deploy
 

@@ -7,6 +7,8 @@
   --brand: #2563eb;
   --brand-2: #0ea5e9;
   --brand-3: #14b8a6;
+  --font-body: "Avenir Next", "Segoe UI", sans-serif;
+  --font-display: "Trebuchet MS", "Avenir Next", sans-serif;
 }
 
 * {
@@ -162,6 +164,8 @@ td {
   padding: 11px 12px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+  white-space: normal;
+  line-height: 1.45;
 }
 
 th {

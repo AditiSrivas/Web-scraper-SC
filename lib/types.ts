@@ -45,8 +45,18 @@ export interface ScrapedJobRow {
   website: string;
   pageUrl: string;
   jobTitle: string;
+  jobDescription: string;
+  roleSnippet: string;
+  roleLocationText: string;
   roleLocationBucket: "India" | "Abroad" | "Unknown";
+  requiredTechnologies: string;
   consultantEmail: string;
+  contactInformation: string;
   aiMatchedTargetRole: string;
   aiMatchReason: string;
+  generatedSubject: string;
+  generatedEmailBody: string;
+  generatedToneNotes: string;
+  roleFingerprint: string;
+  isNewRole: boolean;
 }

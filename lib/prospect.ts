@@ -1,4 +1,4 @@
-import { Prospect } from "@/lib/types";
+import { Prospect, ScrapedJobRow } from "@/lib/types";
 
 function toStringValue(value: unknown): string {
   if (value == null) return "";
@@ -104,4 +104,31 @@ export function buildPrompt(prospect: Prospect, fastMode = false): { system: str
   ].join("\n");
 
   return { system, user, toneContext: `${country} | ${industry} | ${title} | ${size}` };
+}
+
+export function buildProspectFromScrapedRole(role: ScrapedJobRow): Prospect {
+  const location = role.roleLocationText || role.roleLocationBucket;
+  const target = role.aiMatchedTargetRole || "relevant SAP/ERP hiring";
+  const technologies = role.requiredTechnologies || "Not explicitly listed";
+
+  return {
+    personName: "",
+    personDetails: "Talent Acquisition / Hiring Team",
+    country: location,
+    linkedinId: role.pageUrl,
+    companyName: role.companyName || role.website,
+    companyDetails: `Company careers page / website hiring signal sourced from ${role.website}`,
+    employeeCountRaw: "",
+    employeeDistribution: "",
+    activitiesDetails: [
+      `Open Role: ${role.jobTitle || "Role not extracted"}`,
+      `Matched Target Role: ${target}`,
+      `Location: ${location}`,
+      `Technologies: ${technologies}`,
+      `Job Description: ${role.jobDescription || role.roleSnippet || "No extra snippet available"}`,
+      `Role Context: ${role.roleSnippet || "No extra snippet available"}`,
+      `Source: ${role.pageUrl}`
+    ].join("\n"),
+    contactDetails: role.contactInformation || role.consultantEmail
+  };
 }

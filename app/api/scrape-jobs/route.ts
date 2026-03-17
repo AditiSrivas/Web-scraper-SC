@@ -1,6 +1,9 @@
 import * as XLSX from "xlsx";
 import { promisePool } from "@/lib/async";
+import { generateEmailFromProspect } from "@/lib/llm";
+import { buildProspectFromScrapedRole } from "@/lib/prospect";
 import { scrapedRowsToCsv } from "@/lib/scrape-csv";
+import { rememberRoleFingerprints, splitNewRoleFingerprints } from "@/lib/scrape-state";
 import { scrapeCompanyJobs } from "@/lib/scraper";
 import { LLMProvider, LlmRunOptions, ScrapedJobRow } from "@/lib/types";
 
@@ -82,7 +85,34 @@ export async function POST(request: Request): Promise<Response> {
       })
     );
 
-    const rows: ScrapedJobRow[] = chunks.flat();
+    const detectedRows: ScrapedJobRow[] = chunks.flat();
+    const { newFingerprints, skippedCount } = await splitNewRoleFingerprints(detectedRows.map((row) => row.roleFingerprint));
+
+    const newRows = detectedRows.filter((row) => newFingerprints.has(row.roleFingerprint));
+    const generatedNewRows = await promisePool(newRows, Math.min(siteConcurrency, 4), async (row) => {
+      if (!row.jobTitle && !row.roleSnippet) {
+        return row;
+      }
+
+      const generated = await generateEmailFromProspect(buildProspectFromScrapedRole(row), {
+        ...llmOptions,
+        maxTokens: Math.max(180, llmOptions.maxTokens ?? 180),
+        fastMode: true
+      });
+
+      return {
+        ...row,
+        generatedSubject: generated.subject,
+        generatedEmailBody: generated.body,
+        generatedToneNotes: generated.toneNotes,
+        isNewRole: true
+      };
+    });
+
+    const newRowMap = new Map(generatedNewRows.map((row) => [row.roleFingerprint, row]));
+    const rows = detectedRows.map((row) => newRowMap.get(row.roleFingerprint) ?? { ...row, isNewRole: false });
+
+    await rememberRoleFingerprints(generatedNewRows.map((row) => row.roleFingerprint));
     const csv = scrapedRowsToCsv(rows);
 
     const indiaRoles = rows.filter((r) => r.roleLocationBucket === "India").length;
@@ -95,6 +125,9 @@ export async function POST(request: Request): Promise<Response> {
       csv,
       summary: {
         companiesProcessed: candidates.length,
+        detectedRoles: detectedRows.length,
+        newRoles: generatedNewRows.length,
+        skippedExistingRoles: skippedCount,
         indiaRoles,
         abroadRoles,
         emailHits,

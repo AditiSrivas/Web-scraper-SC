@@ -5,10 +5,20 @@ const headers: Array<{ key: keyof ScrapedJobRow; label: string }> = [
   { key: "website", label: "website" },
   { key: "pageUrl", label: "page_url" },
   { key: "jobTitle", label: "job_title" },
+  { key: "jobDescription", label: "job_description" },
+  { key: "roleSnippet", label: "role_snippet" },
+  { key: "roleLocationText", label: "role_location_text" },
   { key: "roleLocationBucket", label: "role_location_bucket" },
+  { key: "requiredTechnologies", label: "required_technologies" },
   { key: "consultantEmail", label: "consultant_email" },
+  { key: "contactInformation", label: "contact_information" },
   { key: "aiMatchedTargetRole", label: "ai_matched_target_role" },
-  { key: "aiMatchReason", label: "ai_match_reason" }
+  { key: "aiMatchReason", label: "ai_match_reason" },
+  { key: "generatedSubject", label: "generated_subject" },
+  { key: "generatedEmailBody", label: "generated_email_body" },
+  { key: "generatedToneNotes", label: "generated_tone_notes" },
+  { key: "roleFingerprint", label: "role_fingerprint" },
+  { key: "isNewRole", label: "is_new_role" }
 ];
 
 function escape(value: string): string {

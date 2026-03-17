@@ -33,10 +33,20 @@ type ScrapeRow = {
   website: string;
   pageUrl: string;
   jobTitle: string;
+  jobDescription: string;
+  roleSnippet: string;
+  roleLocationText: string;
   roleLocationBucket: string;
+  requiredTechnologies: string;
   consultantEmail: string;
+  contactInformation: string;
   aiMatchedTargetRole: string;
   aiMatchReason: string;
+  generatedSubject: string;
+  generatedEmailBody: string;
+  generatedToneNotes: string;
+  roleFingerprint: string;
+  isNewRole: boolean;
 };
 
 type ScrapeApiResponse = {
@@ -45,6 +55,9 @@ type ScrapeApiResponse = {
   csv: string;
   summary?: {
     companiesProcessed: number;
+    detectedRoles: number;
+    newRoles: number;
+    skippedExistingRoles: number;
     indiaRoles: number;
     abroadRoles: number;
     emailHits: number;
@@ -182,7 +195,7 @@ export default function HomePage() {
 
       <div className="grid">
         <section className="card">
-          <h3 style={{ marginTop: 0 }}>{tab === "emails" ? "Use Case 1: Personalized Email Generator" : "Use Case 2: Website Roles Scraper + AI Mapping"}</h3>
+          <h3 style={{ marginTop: 0 }}>{tab === "emails" ? "Use Case 1: Personalized Email Generator" : "Use Case 2: Website Roles Scraper + Outreach Email Drafts"}</h3>
 
           <div className="form-row" style={{ marginBottom: 8 }}>
             <label>
@@ -254,6 +267,9 @@ export default function HomePage() {
             </form>
           ) : (
             <form onSubmit={handleScrape}>
+              <p className="meta" style={{ marginTop: 0 }}>
+                Repeated runs skip previously seen role fingerprints and only draft emails for newly detected openings.
+              </p>
               <div className="form-row">
                 <label>
                   Company websites file (CSV/XLSX)
@@ -298,7 +314,7 @@ export default function HomePage() {
 
               {scrapeData?.summary ? (
                 <p className="meta">
-                  Companies: {scrapeData.summary.companiesProcessed} | Roles: {scrapeData.count} | India: {scrapeData.summary.indiaRoles} | Abroad: {scrapeData.summary.abroadRoles} | Emails: {scrapeData.summary.emailHits} | {Math.round(scrapeData.summary.durationMs / 1000)}s
+                  Companies: {scrapeData.summary.companiesProcessed} | Detected: {scrapeData.summary.detectedRoles} | New roles: {scrapeData.summary.newRoles} | Skipped existing: {scrapeData.summary.skippedExistingRoles} | India: {scrapeData.summary.indiaRoles} | Abroad: {scrapeData.summary.abroadRoles} | Contact emails: {scrapeData.summary.emailHits} | {Math.round(scrapeData.summary.durationMs / 1000)}s
                 </p>
               ) : null}
               {scrapeError ? <div className="error">{scrapeError}</div> : null}
@@ -343,9 +359,12 @@ export default function HomePage() {
                   <tr>
                     <th>Company</th>
                     <th>Job Title</th>
-                    <th>India/Abroad</th>
-                    <th>Consultant Email</th>
-                    <th>AI Matched Role</th>
+                    <th>Location</th>
+                    <th>Technologies</th>
+                    <th>JD</th>
+                    <th>Contact Info</th>
+                    <th>AI Match</th>
+                    <th>Email Draft</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -353,9 +372,12 @@ export default function HomePage() {
                     <tr key={`${row.website}-${index}`}>
                       <td>{row.companyName || row.website}</td>
                       <td>{row.jobTitle || "-"}</td>
-                      <td>{row.roleLocationBucket}</td>
-                      <td>{row.consultantEmail || "-"}</td>
-                      <td>{row.aiMatchedTargetRole || "-"}</td>
+                      <td>{row.roleLocationText || row.roleLocationBucket}</td>
+                      <td>{row.requiredTechnologies || "-"}</td>
+                      <td>{row.jobDescription || row.roleSnippet || "-"}</td>
+                      <td>{row.contactInformation || row.consultantEmail || "-"}</td>
+                      <td>{row.aiMatchedTargetRole || row.aiMatchReason || "-"}</td>
+                      <td>{row.generatedSubject ? `${row.generatedSubject} | ${row.generatedEmailBody.slice(0, 110)}${row.generatedEmailBody.length > 110 ? "..." : ""}` : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
