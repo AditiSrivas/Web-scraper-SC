@@ -1,3 +1,4 @@
+import { lookupField } from "@/lib/tabular";
 import { Prospect, ScrapedJobRow } from "@/lib/types";
 
 function toStringValue(value: unknown): string {
@@ -7,18 +8,20 @@ function toStringValue(value: unknown): string {
 
 export function normalizeProspect(input: Record<string, unknown>): Prospect {
   return {
-    personName: toStringValue(input["Person Name or\nCompany Name"] || input["Person Name or Company Name"]),
-    personDetails: toStringValue(input["Person\nDetails"] || input["Person Details"]),
-    country: toStringValue(input["Country"]),
-    linkedinId: toStringValue(input["Linkedin\nId"] || input["Linkedin Id"]),
-    companyName: toStringValue(input["Current Company Name"]),
-    companyDetails: toStringValue(input["Current Company\n Details"] || input["Current Company Details"]),
-    employeeCountRaw: toStringValue(input["No. of Employees in \nCurrent Company\n"] || input["No. of Employees in Current Company"]),
-    employeeDistribution: toStringValue(
-      input["Countrywise distribution\nof employees in Current\nCompany"] || input["Countrywise distribution of employees in Current Company"]
+    personName: toStringValue(
+      lookupField(input, ["Person Name or Company Name", "Person Name", "Company Name", "Name"])
     ),
-    activitiesDetails: toStringValue(input["Activities\nDetails"] || input["Activities Details"]),
-    contactDetails: toStringValue(input["Person contact\nDetails"] || input["Person contact Details"])
+    personDetails: toStringValue(lookupField(input, ["Person Details", "Title", "Job Title", "Role"])),
+    country: toStringValue(lookupField(input, ["Country", "Location", "Country Location"])),
+    linkedinId: toStringValue(lookupField(input, ["Linkedin Id", "LinkedIn URL", "Linkedin URL", "Linkedin"])),
+    companyName: toStringValue(lookupField(input, ["Current Company Name", "Company Name", "Company"])),
+    companyDetails: toStringValue(lookupField(input, ["Current Company Details", "Company Details", "About Company"])),
+    employeeCountRaw: toStringValue(lookupField(input, ["No of Employees in Current Company", "Employees", "Employee Count"])),
+    employeeDistribution: toStringValue(
+      lookupField(input, ["Countrywise distribution of employees in Current Company", "Employee Distribution"])
+    ),
+    activitiesDetails: toStringValue(lookupField(input, ["Activities Details", "Activity Details", "Role Details", "Post Content"])),
+    contactDetails: toStringValue(lookupField(input, ["Person contact Details", "Contact Details", "Email", "Contact"]))
   };
 }
 
@@ -71,12 +74,12 @@ export function buildPrompt(prospect: Prospect, fastMode = false): { system: str
   const size = employeeBucket(prospect.employeeCountRaw);
 
   const system = fastMode
-    ? "Write a concise B2B outreach email. Return strict JSON with keys subject, body, toneNotes."
+    ? "Write a concise B2B outreach email for SAP hiring support. Return strict JSON with keys subject, body, toneNotes."
     : "You write concise, high-conversion B2B outreach emails for SAP hiring partnership offers. Return strict JSON with keys subject, body, toneNotes.";
 
   const user = [
     "Generate one personalized cold email.",
-    "Use this structure: 1) deployment statement 2) value emphasis 3) CTA.",
+    "Use this structure exactly: 1) Core deployment statement 2) Value emphasis block 3) CTA block.",
     `Person Name: ${prospect.personName}`,
     `Person Details: ${prospect.personDetails}`,
     `Country/Location: ${prospect.country}`,
@@ -91,12 +94,17 @@ export function buildPrompt(prospect: Prospect, fastMode = false): { system: str
     `Derived Title Bucket: ${title}`,
     `Derived Employee Size Bucket: ${size}`,
     "Rules:",
-    "- India: quick deployment + local alignment.",
-    "- Overseas: global delivery readiness + governance.",
-    "- Staffing: submission-ready profile quality and speed.",
-    "- IT Services/Consulting: delivery ownership + integration stability.",
-    "- Small firms: urgent, lean tone. Enterprise: governance and risk mitigation.",
+    "- Country affects deployment framing, not the whole email.",
+    "- Industry affects value positioning.",
+    "- Employee size affects maturity and urgency tone.",
+    "- Job poster title affects CTA and psychological framing.",
+    "- India: speed, deployability, local alignment, cost control.",
+    "- Overseas: global delivery readiness, remote collaboration, governance.",
+    "- Staffing: submission-ready profiles, shortlist quality, backup supply.",
+    "- IT Services/Consulting: delivery ownership, integration stability, transformation exposure.",
+    "- Small firms: direct and lean. Enterprise: governance and risk mitigation.",
     "- Recruiter CTA: let me know if I can share profiles.",
+    "- Manager CTA: confirm if the role is active.",
     "- Leadership CTA: please advise how to proceed.",
     fastMode
       ? "Constraints: factual, no fake numbers, body 90-130 words, plain business English."

@@ -41,6 +41,7 @@ export interface LlmRunOptions {
 }
 
 export interface ScrapedJobRow {
+  sourceRowNumber: number;
   companyName: string;
   website: string;
   pageUrl: string;

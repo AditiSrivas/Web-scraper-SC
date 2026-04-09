@@ -1,34 +1,67 @@
-# Outreach Engine (Next.js + Vercel)
+# Outreach Engine
 
-Two use cases in one app:
+Outreach Engine is a lead generation and outreach workflow project built around three parts:
 
-1. Personalized email generation from `LinkedIn Active Roles.xlsx`.
-2. Website scraper that finds job-like roles from CSV/XLSX website lists, classifies India vs abroad, extracts consultant emails, AI-maps to your target role list, and drafts outreach emails from the scraped role context.
+- A `frontend` Next.js app for uploading files, running AI-powered email generation, and triggering website scraping.
+- An `email-automator` Python utility for generating personalized outreach emails from LinkedIn-style Excel exports.
+- A `web-scraper` area for scraper input files such as company website lists.
 
-## Key speed upgrades
+## Project Structure
 
-- Parallel email generation (`concurrency` control).
-- Fast mode prompt (`90-130` words, lower token usage).
-- Runtime provider/model switching from UI.
-- Per-run perf metrics (`totalMs`, `rowsPerMinute`, avg row latency).
-
-For your target (5-6 rows < 1 min), start with:
-- `concurrency=4`
-- `fastMode=true`
-- `maxTokens=180-240`
-- fast model (example: `gpt-4o-mini` or `gemini flash` model in your account)
-
-## Setup
-
-```bash
-npm install
-cp .env.local.example .env.local
-npm run dev
+```text
+.
+|-- frontend/
+|   |-- app/
+|   |-- lib/
+|   |-- package.json
+|   |-- tsconfig.json
+|   `-- .env.local.example
+|-- email-automator/
+|   |-- email_generator.py
+|   |-- Linkedin 020326 - Active Roles.xlsx
+|   `-- Active roles customization rules.docx
+|-- web-scraper/
+|   `-- U.K-companies.csv
+`-- README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+## What The Project Does
 
-## Environment variables
+- Generates personalized cold emails from uploaded CSV/XLSX prospect files.
+- Scrapes company websites for role openings and job-related contact details.
+- Uses LLMs to map scraped roles to target roles and draft outreach emails.
+- Supports OpenAI, Anthropic, and Google model providers from the frontend UI.
+
+## Tech Used
+
+- `Next.js 14`
+- `React 18`
+- `TypeScript`
+- `Node.js`
+- `Python 3`
+- `xlsx` for spreadsheet parsing
+- LLM integrations for OpenAI, Anthropic, and Google
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone <your-repo-url>
+cd Web-scraper-SC
+```
+
+### 2. Set up the frontend
+
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local
+```
+
+Add your API keys to `frontend/.env.local`.
+
+Supported environment variables:
 
 - `LLM_PROVIDER=google|openai|anthropic`
 - `LLM_TEMPERATURE=0.2`
@@ -41,20 +74,43 @@ Open [http://localhost:3000](http://localhost:3000)
 - `GOOGLE_API_KEY=`
 - `GOOGLE_MODEL=gemini-3-pro-preview`
 
-## API routes
+### 3. Run the frontend
 
-- `POST /api/generate` (email generation)
-- `POST /api/scrape-jobs` (website scraper + mapping + contextual outreach drafts)
+```bash
+cd frontend
+npm run dev
+```
 
-## Input expectations
+Then open [http://localhost:3000](http://localhost:3000).
 
-- Email generator input: your LinkedIn `.xlsx` (same format you provided).
-- Scraper input: CSV/XLSX with at least a `Website` column (and optional `Company Name`).
-- Incremental scan memory is persisted in `.cache/scrape-state.json`, so repeated runs only return newly discovered role fingerprints.
+### 4. Run the Python email automator
 
-## Vercel deploy
+The Python tool lives in `email-automator/` and uses only Python standard library modules.
 
-1. Push repo to GitHub.
-2. Import project in Vercel.
-3. Add env vars in Vercel settings.
-4. Deploy.
+```bash
+cd email-automator
+python3 email_generator.py --help
+```
+
+## Usage Notes
+
+- Upload prospect/activity CSV or XLSX files in the frontend to generate emails.
+- Upload company website lists in the frontend scraper tab to discover job openings and draft outreach.
+- Scraper state is stored in `frontend/.cache/scrape-state.json`.
+- Sample input files are included in `email-automator/` and `web-scraper/`.
+
+## Development
+
+Frontend commands:
+
+```bash
+cd frontend
+npm run dev
+npm run build
+npm run lint
+```
+
+## Suggested Next Cleanup
+
+- Add a root `.gitignore` if you want to stop tracking build output like `.next/` and installed packages.
+- Add dedicated READMEs inside `frontend/`, `email-automator/`, and `web-scraper/` if you want each module documented separately.

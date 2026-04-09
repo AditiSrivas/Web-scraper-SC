@@ -6,6 +6,7 @@ const STATE_FILE = path.join(STATE_DIR, "scrape-state.json");
 
 interface ScrapeState {
   seenFingerprints: Record<string, string>;
+  rowCursors: Record<string, number>;
 }
 
 async function readState(): Promise<ScrapeState> {
@@ -13,10 +14,11 @@ async function readState(): Promise<ScrapeState> {
     const raw = await readFile(STATE_FILE, "utf8");
     const parsed = JSON.parse(raw) as Partial<ScrapeState>;
     return {
-      seenFingerprints: parsed.seenFingerprints && typeof parsed.seenFingerprints === "object" ? parsed.seenFingerprints : {}
+      seenFingerprints: parsed.seenFingerprints && typeof parsed.seenFingerprints === "object" ? parsed.seenFingerprints : {},
+      rowCursors: parsed.rowCursors && typeof parsed.rowCursors === "object" ? parsed.rowCursors : {}
     };
   } catch {
-    return { seenFingerprints: {} };
+    return { seenFingerprints: {}, rowCursors: {} };
   }
 }
 
@@ -53,5 +55,30 @@ export async function rememberRoleFingerprints(fingerprints: string[]): Promise<
     state.seenFingerprints[fingerprint] = timestamp;
   }
 
+  await writeState(state);
+}
+
+export async function getRowWindow(
+  fileKey: string,
+  totalRows: number,
+  limit: number
+): Promise<{ startIndex: number; endIndex: number; nextIndex: number; wrapped: boolean }> {
+  const state = await readState();
+  const saved = state.rowCursors[fileKey] ?? 0;
+  const wrapped = saved >= totalRows && totalRows > 0;
+  const normalizedSaved = wrapped ? 0 : saved;
+  const startIndex = Math.min(Math.max(normalizedSaved, 0), totalRows);
+  const endIndex = Math.min(startIndex + Math.max(limit, 1), totalRows);
+  return {
+    startIndex,
+    endIndex,
+    nextIndex: endIndex,
+    wrapped
+  };
+}
+
+export async function setRowCursor(fileKey: string, nextIndex: number): Promise<void> {
+  const state = await readState();
+  state.rowCursors[fileKey] = Math.max(0, nextIndex);
   await writeState(state);
 }

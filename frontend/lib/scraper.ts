@@ -4,6 +4,7 @@ import { promisePool } from "@/lib/async";
 import { LlmRunOptions, ScrapedJobRow } from "@/lib/types";
 
 const JOB_LINK_WORDS = ["career", "careers", "job", "jobs", "opportunity", "vacanc", "join-us", "openings"];
+const DEFAULT_CAREER_PATHS = ["/careers", "/jobs", "/join-us", "/vacancies", "/opportunities", "/work-with-us"];
 const JOB_TITLE_HINTS = /\b(hiring|consultant|engineer|developer|architect|manager|sap|oracle|erp|analyst|lead|specialist|admin|support|finance|hris)\b/i;
 const LOCATION_HINTS =
   /\b(india|bangalore|bengaluru|hyderabad|pune|chennai|noida|gurgaon|mumbai|delhi|remote|uk|usa|united states|canada|europe|germany|france|australia|dubai|uae|singapore)\b/i;
@@ -55,6 +56,31 @@ function normalizeUrl(url: string): string {
   if (!trimmed) return "";
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `https://${trimmed}`;
+}
+
+function alternateUrls(url: string): string[] {
+  const out = new Set<string>();
+  const normalized = normalizeUrl(url);
+  if (!normalized) return [];
+
+  out.add(normalized);
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol === "http:") {
+      out.add(`https://${parsed.host}${parsed.pathname}${parsed.search}`);
+    } else if (parsed.protocol === "https:") {
+      out.add(`http://${parsed.host}${parsed.pathname}${parsed.search}`);
+    }
+
+    if (!parsed.hostname.startsWith("www.")) {
+      out.add(`${parsed.protocol}//www.${parsed.hostname}${parsed.pathname}${parsed.search}`);
+    }
+  } catch {
+    return Array.from(out);
+  }
+
+  return Array.from(out);
 }
 
 function stripHtml(html: string): string {
@@ -187,7 +213,19 @@ async function fetchHtml(url: string, timeoutMs = 12000): Promise<string> {
   }
 }
 
+async function fetchFirstHtml(urls: string[]): Promise<{ url: string; html: string }> {
+  for (const url of urls) {
+    const html = await fetchHtml(url);
+    if (html) {
+      return { url, html };
+    }
+  }
+
+  return { url: urls[0] || "", html: "" };
+}
+
 export async function scrapeCompanyJobs(params: {
+  sourceRowNumber: number;
   companyName: string;
   website: string;
   targetRoles: string[];
@@ -198,15 +236,52 @@ export async function scrapeCompanyJobs(params: {
   const website = normalizeUrl(params.website);
   if (!website) return [];
 
-  const home = await fetchHtml(website);
-  if (!home) return [];
-
-  const candidatePages = [website, ...extractLinks(home, website)].slice(0, Math.max(1, params.maxPagesPerSite));
-  const pageHtmls = await promisePool(candidatePages, 3, async (url) => ({ url, html: await fetchHtml(url) }));
+  const homeFetch = await fetchFirstHtml(alternateUrls(website));
+  const home = homeFetch.html;
 
   const allEmails = new Set<string>();
   const allPhones = new Set<string>();
   const rows: ScrapedJobRow[] = [];
+
+  if (!home) {
+    return [
+      {
+        sourceRowNumber: params.sourceRowNumber,
+        companyName: params.companyName,
+        website,
+        pageUrl: website,
+        jobTitle: "",
+        jobDescription: "",
+        roleSnippet: "",
+        roleLocationText: "",
+        roleLocationBucket: "Unknown",
+        requiredTechnologies: "",
+        consultantEmail: "",
+        contactInformation: "",
+        aiMatchedTargetRole: "",
+        aiMatchReason: "Website could not be fetched or blocked scraping",
+        generatedSubject: "",
+        generatedEmailBody: "",
+        generatedToneNotes: "",
+        roleFingerprint: fingerprintRole(params.companyName, website, website, "", "fetch-failed"),
+        isNewRole: true
+      }
+    ];
+  }
+
+  const guessedPages = DEFAULT_CAREER_PATHS.map((path) => {
+    try {
+      return new URL(path, homeFetch.url || website).toString();
+    } catch {
+      return "";
+    }
+  }).filter(Boolean);
+
+  const candidatePages = Array.from(new Set([homeFetch.url || website, ...extractLinks(home, homeFetch.url || website), ...guessedPages])).slice(
+    0,
+    Math.max(1, params.maxPagesPerSite + DEFAULT_CAREER_PATHS.length)
+  );
+  const pageHtmls = await promisePool(candidatePages, 4, async (url) => ({ url, html: await fetchHtml(url) }));
 
   for (const page of pageHtmls) {
     if (!page.html) continue;
@@ -228,6 +303,7 @@ export async function scrapeCompanyJobs(params: {
       ];
 
       rows.push({
+        sourceRowNumber: params.sourceRowNumber,
         companyName: params.companyName,
         website,
         pageUrl: page.url,
@@ -253,6 +329,7 @@ export async function scrapeCompanyJobs(params: {
   if (rows.length === 0) {
     return [
       {
+        sourceRowNumber: params.sourceRowNumber,
         companyName: params.companyName,
         website,
         pageUrl: website,

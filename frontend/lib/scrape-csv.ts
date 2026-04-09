@@ -1,6 +1,7 @@
 import { ScrapedJobRow } from "@/lib/types";
 
 const headers: Array<{ key: keyof ScrapedJobRow; label: string }> = [
+  { key: "sourceRowNumber", label: "source_row_number" },
   { key: "companyName", label: "company_name" },
   { key: "website", label: "website" },
   { key: "pageUrl", label: "page_url" },

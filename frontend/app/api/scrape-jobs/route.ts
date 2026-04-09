@@ -1,10 +1,10 @@
-import * as XLSX from "xlsx";
 import { promisePool } from "@/lib/async";
 import { generateEmailFromProspect } from "@/lib/llm";
 import { buildProspectFromScrapedRole } from "@/lib/prospect";
 import { scrapedRowsToCsv } from "@/lib/scrape-csv";
-import { rememberRoleFingerprints, splitNewRoleFingerprints } from "@/lib/scrape-state";
+import { getRowWindow, rememberRoleFingerprints, setRowCursor, splitNewRoleFingerprints } from "@/lib/scrape-state";
 import { scrapeCompanyJobs } from "@/lib/scraper";
+import { lookupField, parseSpreadsheetFile } from "@/lib/tabular";
 import { LLMProvider, LlmRunOptions, ScrapedJobRow } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,16 +20,53 @@ function provider(value: FormDataEntryValue | null): LLMProvider | undefined {
   return undefined;
 }
 
-function isCompanyRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
 function parseRoles(input: string): string[] {
   return input
     .split(/[\n,]/g)
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 40);
+}
+
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "yahoo.com",
+  "outlook.com",
+  "hotmail.com",
+  "icloud.com",
+  "aol.com",
+  "live.com",
+  "proton.me",
+  "protonmail.com"
+]);
+
+function extractFirstEmail(text: string): string {
+  const match = String(text ?? "").match(/[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/);
+  return match?.[0] ?? "";
+}
+
+function inferWebsiteFromRow(raw: Record<string, unknown>): string {
+  const explicitWebsite = String(
+    lookupField(raw, ["Website", "Company Website", "Current Company Website", "URL", "Site", "Company Url"]) ?? ""
+  ).trim();
+
+  if (explicitWebsite) {
+    return explicitWebsite;
+  }
+
+  const contactText = String(
+    lookupField(raw, ["Person contact Details", "Contact Details", "Email", "Contact", "Work Email"]) ?? ""
+  ).trim();
+  const email = extractFirstEmail(contactText).toLowerCase();
+
+  if (email) {
+    const domain = email.split("@")[1] ?? "";
+    if (domain && !PERSONAL_EMAIL_DOMAINS.has(domain)) {
+      return `https://${domain}`;
+    }
+  }
+
+  return "";
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -58,24 +95,47 @@ export async function POST(request: Request): Promise<Response> {
 
     const targetRoles = parseRoles(String(form.get("targetRoles") ?? ""));
 
-    const bytes = await file.arrayBuffer();
-    const workbook = XLSX.read(Buffer.from(bytes), { type: "buffer" });
-    if (!workbook.SheetNames.length) {
-      return Response.json({ error: "Company workbook has no sheets." }, { status: 400 });
-    }
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const records = XLSX.utils.sheet_to_json(firstSheet, { defval: "" }).filter(isCompanyRecord);
+    const parsed = await parseSpreadsheetFile(file);
+    const { startIndex, endIndex, nextIndex, wrapped } = await getRowWindow(parsed.fileKey, parsed.rows.length, companyLimit);
+    const selectedRows = parsed.rows.slice(startIndex, endIndex);
 
-    const candidates = records
+    const candidateRows = selectedRows.map((entry) => ({
+      sourceRowNumber: entry.rowNumber,
+      companyName: String(lookupField(entry.raw, ["Company Name", "Company", "Current Company Name"]) ?? "").trim(),
+      website: inferWebsiteFromRow(entry.raw),
+      contactInformation: String(
+        lookupField(entry.raw, ["Person contact Details", "Contact Details", "Email", "Contact", "Work Email"]) ?? ""
+      ).trim()
+    }));
+
+    const candidates = candidateRows.filter((r) => r.website);
+    const missingWebsiteRows: ScrapedJobRow[] = candidateRows
+      .filter((r) => !r.website)
       .map((r) => ({
-        companyName: String(r["Company Name"] ?? r["company"] ?? "").trim(),
-        website: String(r["Website"] ?? r["website"] ?? "").trim()
-      }))
-      .filter((r) => r.website)
-      .slice(0, companyLimit);
+        sourceRowNumber: r.sourceRowNumber,
+        companyName: r.companyName,
+        website: "",
+        pageUrl: "",
+        jobTitle: "",
+        jobDescription: "",
+        roleSnippet: "",
+        roleLocationText: "",
+        roleLocationBucket: "Unknown",
+        requiredTechnologies: "",
+        consultantEmail: extractFirstEmail(r.contactInformation),
+        contactInformation: r.contactInformation,
+        aiMatchedTargetRole: "",
+        aiMatchReason: "No company website or corporate email domain could be derived from this row",
+        generatedSubject: "",
+        generatedEmailBody: "",
+        generatedToneNotes: "",
+        roleFingerprint: `missing-website-${parsed.fileKey}-${r.sourceRowNumber}`,
+        isNewRole: false
+      }));
 
     const chunks = await promisePool(candidates, siteConcurrency, async (c) =>
       scrapeCompanyJobs({
+        sourceRowNumber: c.sourceRowNumber,
         companyName: c.companyName,
         website: c.website,
         targetRoles,
@@ -85,7 +145,7 @@ export async function POST(request: Request): Promise<Response> {
       })
     );
 
-    const detectedRows: ScrapedJobRow[] = chunks.flat();
+    const detectedRows: ScrapedJobRow[] = [...chunks.flat(), ...missingWebsiteRows];
     const { newFingerprints, skippedCount } = await splitNewRoleFingerprints(detectedRows.map((row) => row.roleFingerprint));
 
     const newRows = detectedRows.filter((row) => newFingerprints.has(row.roleFingerprint));
@@ -113,6 +173,7 @@ export async function POST(request: Request): Promise<Response> {
     const rows = detectedRows.map((row) => newRowMap.get(row.roleFingerprint) ?? { ...row, isNewRole: false });
 
     await rememberRoleFingerprints(generatedNewRows.map((row) => row.roleFingerprint));
+    await setRowCursor(parsed.fileKey, nextIndex);
     const csv = scrapedRowsToCsv(rows);
 
     const indiaRoles = rows.filter((r) => r.roleLocationBucket === "India").length;
@@ -131,6 +192,10 @@ export async function POST(request: Request): Promise<Response> {
         indiaRoles,
         abroadRoles,
         emailHits,
+        startRow: selectedRows[0]?.rowNumber ?? 0,
+        endRow: selectedRows[selectedRows.length - 1]?.rowNumber ?? 0,
+        nextRow: nextIndex < parsed.rows.length ? parsed.rows[nextIndex]?.rowNumber ?? nextIndex + 2 : parsed.rows.length + 1,
+        wrappedToStart: wrapped,
         durationMs: Date.now() - started
       }
     });

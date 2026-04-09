@@ -1,15 +1,11 @@
-import * as XLSX from "xlsx";
 import { rowsToCsv } from "@/lib/csv";
 import { promisePool } from "@/lib/async";
 import { generateEmailFromProspect } from "@/lib/llm";
 import { extractEmail, normalizeProspect } from "@/lib/prospect";
+import { parseSpreadsheetFile } from "@/lib/tabular";
 import { GeneratedRow, LLMProvider, LlmRunOptions } from "@/lib/types";
 
 export const runtime = "nodejs";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function num(value: FormDataEntryValue | null, fallback: number): number {
   const parsed = Number(value ?? "");
@@ -41,27 +37,13 @@ export async function POST(request: Request): Promise<Response> {
     };
 
     if (!(file instanceof File)) {
-      return Response.json({ error: "Missing XLSX file." }, { status: 400 });
+      return Response.json({ error: "Missing CSV/XLSX file." }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const workbook = XLSX.read(Buffer.from(bytes), { type: "buffer" });
-    if (!workbook.SheetNames.length) {
-      return Response.json({ error: "Workbook has no sheets." }, { status: 400 });
-    }
-    const preferred = workbook.SheetNames.find((name) => name.trim().toLowerCase() === "linkedin") || workbook.SheetNames[0];
-    const sheet = workbook.Sheets[preferred];
-
-    if (!sheet) {
-      return Response.json({ error: "No worksheet found in workbook." }, { status: 400 });
-    }
-
-    const jsonRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    const sourceRows = jsonRows.filter(isRecord);
-    const bounded = limitInput > 0 ? sourceRows.slice(0, limitInput) : sourceRows;
+    const parsed = await parseSpreadsheetFile(file);
+    const bounded = limitInput > 0 ? parsed.rows.slice(0, limitInput) : parsed.rows;
 
     const validRows = bounded
-      .map((raw, idx) => ({ raw, rowNumber: idx + 2 }))
       .map((entry) => ({ ...entry, prospect: normalizeProspect(entry.raw) }))
       .filter((entry) => entry.prospect.personName || entry.prospect.companyName || entry.prospect.activitiesDetails);
 

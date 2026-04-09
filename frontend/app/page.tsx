@@ -29,6 +29,7 @@ type EmailApiResponse = {
 };
 
 type ScrapeRow = {
+  sourceRowNumber: number;
   companyName: string;
   website: string;
   pageUrl: string;
@@ -61,6 +62,10 @@ type ScrapeApiResponse = {
     indiaRoles: number;
     abroadRoles: number;
     emailHits: number;
+    startRow: number;
+    endRow: number;
+    nextRow: number;
+    wrappedToStart?: boolean;
     durationMs: number;
   };
   error?: string;
@@ -114,7 +119,7 @@ export default function HomePage() {
     setEmailData(null);
 
     if (!file) {
-      setError("Upload your LinkedIn active roles .xlsx first.");
+      setError("Upload your contacts/activity CSV or XLSX file first.");
       return;
     }
 
@@ -216,8 +221,8 @@ export default function HomePage() {
             <form onSubmit={handleEmailGenerate}>
               <div className="form-row">
                 <label>
-                  LinkedIn Active Roles (.xlsx)
-                  <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                  Contacts / Active Roles (CSV/XLSX)
+                  <input type="file" accept=".csv,.xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                 </label>
                 <label>
                   Max rows
@@ -317,6 +322,16 @@ export default function HomePage() {
                   Companies: {scrapeData.summary.companiesProcessed} | Detected: {scrapeData.summary.detectedRoles} | New roles: {scrapeData.summary.newRoles} | Skipped existing: {scrapeData.summary.skippedExistingRoles} | India: {scrapeData.summary.indiaRoles} | Abroad: {scrapeData.summary.abroadRoles} | Contact emails: {scrapeData.summary.emailHits} | {Math.round(scrapeData.summary.durationMs / 1000)}s
                 </p>
               ) : null}
+              {scrapeData?.summary ? (
+                <p className="meta">
+                  Processed input rows {scrapeData.summary.startRow}-{scrapeData.summary.endRow}. Next scraper run resumes from row {scrapeData.summary.nextRow}.
+                </p>
+              ) : null}
+              {scrapeData?.summary?.wrappedToStart ? (
+                <p className="meta">
+                  The previous run had already reached the end of the uploaded file, so this run automatically restarted from the first company row.
+                </p>
+              ) : null}
               {scrapeError ? <div className="error">{scrapeError}</div> : null}
             </form>
           )}
@@ -351,12 +366,21 @@ export default function HomePage() {
           </section>
         ) : null}
 
+        {tab === "emails" && emailData && emailData.rows.length === 0 ? (
+          <section className="card">
+            <p className="meta" style={{ margin: 0 }}>
+              No valid contact rows were found in the uploaded file. Check that the sheet has contact, company, and activity details columns.
+            </p>
+          </section>
+        ) : null}
+
         {tab === "scraper" && scrapeData?.rows?.length ? (
           <section className="card">
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
+                    <th>Source Row</th>
                     <th>Company</th>
                     <th>Job Title</th>
                     <th>Location</th>
@@ -370,6 +394,7 @@ export default function HomePage() {
                 <tbody>
                   {scrapeData.rows.map((row, index) => (
                     <tr key={`${row.website}-${index}`}>
+                      <td>{row.sourceRowNumber || "-"}</td>
                       <td>{row.companyName || row.website}</td>
                       <td>{row.jobTitle || "-"}</td>
                       <td>{row.roleLocationText || row.roleLocationBucket}</td>
@@ -383,6 +408,14 @@ export default function HomePage() {
                 </tbody>
               </table>
             </div>
+          </section>
+        ) : null}
+
+        {tab === "scraper" && scrapeData && scrapeData.rows.length === 0 ? (
+          <section className="card">
+            <p className="meta" style={{ margin: 0 }}>
+              No roles were detected for the selected input rows. The row cursor still advanced, so the next run will continue from the next company row.
+            </p>
           </section>
         ) : null}
       </div>
