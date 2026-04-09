@@ -7,3 +7,5 @@ out
 generated_emails.csv
 *.log
 ._*
+frontend/node_modules
+frontend/.next
