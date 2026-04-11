@@ -1,7 +1,19 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
-const STATE_DIR = path.join(process.cwd(), ".cache");
+function resolveStateDir(): string {
+  const configuredDir = process.env.SCRAPE_STATE_DIR?.trim();
+  if (configuredDir) return configuredDir;
+
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+    return path.join(os.tmpdir(), "outreach-engine-cache");
+  }
+
+  return path.join(process.cwd(), ".cache");
+}
+
+const STATE_DIR = resolveStateDir();
 const STATE_FILE = path.join(STATE_DIR, "scrape-state.json");
 
 interface ScrapeState {
@@ -23,8 +35,15 @@ async function readState(): Promise<ScrapeState> {
 }
 
 async function writeState(state: ScrapeState): Promise<void> {
-  await mkdir(STATE_DIR, { recursive: true });
-  await writeFile(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
+  try {
+    await mkdir(STATE_DIR, { recursive: true });
+    await writeFile(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
+  } catch (error) {
+    console.warn("Unable to persist scrape state", {
+      stateFile: STATE_FILE,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }
 
 export async function splitNewRoleFingerprints(fingerprints: string[]): Promise<{ newFingerprints: Set<string>; skippedCount: number }> {

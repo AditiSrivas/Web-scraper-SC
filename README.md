@@ -96,7 +96,8 @@ python3 email_generator.py --help
 
 - Upload prospect/activity CSV or XLSX files in the frontend to generate emails.
 - Upload company website lists in the frontend scraper tab to discover job openings and draft outreach.
-- Scraper state is stored in `frontend/.cache/scrape-state.json`.
+- Scraper state is stored in `frontend/.cache/scrape-state.json` during local development.
+- On Vercel/production runtimes, scraper state falls back to the writable temp directory (or `SCRAPE_STATE_DIR` if set).
 - Sample input files are included in `email-automator/` and `web-scraper/`.
 
 ## Development
